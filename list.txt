@@ -1,7 +1,7 @@
 Invoice1
 Invoice2.pdf
 Invoice2.docx
-Tax Report
+TaxReport
 license
-PurchaseOrder
+Purchase Order
 Hacking_Tool
