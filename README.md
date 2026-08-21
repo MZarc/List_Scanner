@@ -41,7 +41,7 @@ List_Scanner/
 ├── build/
 │   └── Build-Exe.ps1          # Automated C# / Win32 Standalone Executable Compiler
 ├── List Scanner.exe            # Ready-to-use Standalone Windows Executable (Version 1.0)
-├── list.txt                   # Target items list file
+├── list.txt                   # Target items list file (Example)
 ├── .gitignore                 # GitHub ignore rules
 └── README.md                  # Documentation & user guide
 ```
@@ -59,7 +59,7 @@ In the same folder, create a plain text file named **`list.txt`** with item name
 ```text
 Invoice1
 Invoice2.pdf
-- N002141726498
+- MZ0002561
 Tax Report
 8261
 ```
@@ -67,7 +67,7 @@ Tax Report
 > **Note**: Flexible List Inputs Supported:
 > - **Without extension** (`Invoice1`): Matches base name `Invoice1` across any extension (`Invoice1.pdf`, `Invoice1.docx`, etc.).
 > - **With extension** (`Invoice2.pdf`): Performs exact filename matching.
-> - **Bulleted / Formatted lines** (`- N002141726498`): Automatically strips bullet symbols (`- `, `* `, `1. `) to extract the core search ID.
+> - **Bulleted / Formatted lines** (`- MZ0002561`): Automatically strips bullet symbols (`- `, `* `, `1. `) to extract the core search ID.
 > - **Embedded Substrings** (`8261`): Matches files containing `8261` anywhere inside the filename (`INV_8261_final.pdf`).
 
 ### Step 3: Run `List Scanner.exe` & Select Mode
