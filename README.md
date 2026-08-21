@@ -29,7 +29,7 @@
 ## 📂 Repository Structure
 
 ```
-yo/
+List_Scanner/
 ├── assets/
 │   ├── icon.png               # High-Resolution HD App Icon (1024x1024)
 │   └── icon.ico               # Auto-generated 256x256 multi-res Win32 Icon resource
