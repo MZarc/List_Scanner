@@ -20,9 +20,12 @@
 ## ✨ Features
 
 - ⚡ **Single Standalone Executable (`List Scanner.exe`)**: Completely portable. Copy only `List Scanner.exe` into any working directory alongside `list.txt` and run! No `.ps1` or `.bat` files required in that directory!
-- 🎯 **Universal Extension Support**: Scans and matches **any** file format (`.png`, `.jpg`, `.pdf`, `.zip`, `.mp4`, `.exe`, `.doc`, etc.) specified in `list.txt`.
+- 🎛️ **Interactive Mode Selection on Launch**: Choose between 4 flexible matching modes on launch, defaulting to **ALL MODES** automatically by simply pressing **Enter**.
+- 🎯 **Universal Extension Support**: Scans and matches **any** file format (`.png`, `.jpg`, `.pdf`, `.zip`, `.mp4`, `.exe`, `.doc`, `.csv`, etc.) specified in `list.txt`.
+- 🔍 **Flexible Embedded Substring Matching**: Locates files where list IDs appear anywhere as embedded substrings inside complex filenames (e.g. `8261` inside `INV_8261_final.pdf`).
+- 🧹 **Automatic Bullet & List Sanitization**: Automatically strips list formatting prefixes (`- `, `* `, `• `, `1. `, `1) `) copied from Markdown, Word, or emails.
 - 🛡️ **Smart Application Isolation**: Protects application binaries (`List Scanner.exe`, build scripts, engine files) from being matched or copied.
-- 📊 **Unified Stream & Detailed Verification Reports**: Real-time progress monitoring followed by automated file integrity verification and detailed report files (`Missing Items.txt`, `Multiple Matches.txt`, `Copy Failures.txt`).
+- 📄 **Standardized Professional Reports**: Generates unified, beautifully structured report files (`Missing Items.txt`, `Partial Matches.txt`, `Multiple Matches.txt`, `Copy Failures.txt`, `Verification Failures.txt`).
 
 ---
 
@@ -56,24 +59,29 @@ In the same folder, create a plain text file named **`list.txt`** with item name
 ```text
 Invoice1
 Invoice2.pdf
-Invoice2.docx
+- N002141726498
 Tax Report
-license
+8261
 ```
 
-> **Note**: You can specify item names with or without file extensions:
-> - Without extension (`Invoice1`): Matches all files sharing the base name `Invoice1` regardless of extension (`Invoice1.pdf`, `Invoice1.docx`, etc.).
-> - With extension (`Invoice2.pdf`): Performs exact filename matching.
+> **Note**: Flexible List Inputs Supported:
+> - **Without extension** (`Invoice1`): Matches base name `Invoice1` across any extension (`Invoice1.pdf`, `Invoice1.docx`, etc.).
+> - **With extension** (`Invoice2.pdf`): Performs exact filename matching.
+> - **Bulleted / Formatted lines** (`- N002141726498`): Automatically strips bullet symbols (`- `, `* `, `1. `) to extract the core search ID.
+> - **Embedded Substrings** (`8261`): Matches files containing `8261` anywhere inside the filename (`INV_8261_final.pdf`).
 
-### Step 3: Run `List Scanner.exe`
+### Step 3: Run `List Scanner.exe` & Select Mode
 Double-click **`List Scanner.exe`**.
 
-The engine will:
-1. Open in a maximized console window.
-2. Scan the current folder for matching items from `list.txt`.
-3. Create a timestamped output directory: `List Items (dd-MM-yyyy - HH.mm.ss)`.
-4. Copy all matched files and perform post-copy verification.
-5. Generate report logs inside `List Items (...)/Reports/`.
+1. The engine will open in a maximized console window and display the **Matching Mode Selection Menu**:
+   - **`[1] ALL MODES (Default - Press Enter)`**: Scans for exact filenames, base names, and embedded substrings.
+   - **`[2] Full Filename with Extension Only`**
+   - **`[3] BaseName without Extension Only`**
+   - **`[4] Embedded Substring / Partial ID Only`**
+2. Press **Enter** (or type `1` to `4` and hit Enter).
+3. The engine creates a timestamped output directory: `List Items (dd-MM-yyyy - HH.mm.ss)`.
+4. Copies all matched files and performs post-copy file size verification.
+5. Generates detailed report logs inside `List Items (...)/Reports/`.
 
 ---
 

@@ -75,7 +75,7 @@ $ScriptContent = Get-Content -LiteralPath $PsScriptPath -Raw -Encoding UTF8
 # Escape double quotes for C# verbatim string literal
 $EscapedScript = $ScriptContent.Replace('"', '""')
 
-$CsCode = @"
+$CsHeader = @'
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -122,7 +122,11 @@ namespace ListScanner
                 string tempName = "M3_Engine_Runner_" + Guid.NewGuid().ToString("N") + ".ps1";
                 tempScriptPath = Path.Combine(Path.GetTempPath(), tempName);
                 
-                string embeddedScript = @"$EscapedScript";
+                string embeddedScript = @"
+'@
+
+$CsFooter = @'
+";
                 
                 File.WriteAllText(tempScriptPath, embeddedScript, new UTF8Encoding(false));
                 
@@ -153,7 +157,9 @@ namespace ListScanner
         }
     }
 }
-"@
+'@
+
+$CsCode = $CsHeader + $EscapedScript + $CsFooter
 
 Write-Host "Writing C# source file with Assembly Info..." -ForegroundColor Cyan
 [System.IO.File]::WriteAllText($TempCsPath, $CsCode, [System.Text.Encoding]::UTF8)

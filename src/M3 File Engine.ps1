@@ -17,6 +17,56 @@ $White  = "White"
 $Gray   = "DarkGray"
 
 # ------------------------------------------------------------
+# FLEXIBLE FILE MATCHER FUNCTION
+# ------------------------------------------------------------
+
+function Get-MatchedFiles {
+    param (
+        [string]$TargetEntry,
+        [array]$Files,
+        [string]$SelectedMode = "1"
+    )
+
+    if ([string]::IsNullOrWhiteSpace($TargetEntry) -or -not $Files) {
+        return @{ Matches = @(); Type = "None" }
+    }
+
+    $Ext = [System.IO.Path]::GetExtension($TargetEntry)
+
+    # Mode 1 or Mode 2: Exact Filename Match
+    if ($SelectedMode -eq "1" -or $SelectedMode -eq "2") {
+        $DirectNameMatches = @($Files | Where-Object { $_.Name -ieq $TargetEntry })
+        if ($DirectNameMatches.Count -gt 0) {
+            return @{ Matches = $DirectNameMatches; Type = "Exact" }
+        }
+    }
+
+    # Mode 1 or Mode 3: Exact BaseName Match (if no extension supplied)
+    if ($SelectedMode -eq "1" -or $SelectedMode -eq "3") {
+        if ([string]::IsNullOrWhiteSpace($Ext)) {
+            $BaseMatches = @($Files | Where-Object { $_.BaseName -ieq $TargetEntry })
+            if ($BaseMatches.Count -gt 0) {
+                return @{ Matches = $BaseMatches; Type = "Exact" }
+            }
+        }
+    }
+
+    # Mode 1 or Mode 4: Whole-Text Substring Match
+    if ($SelectedMode -eq "1" -or $SelectedMode -eq "4") {
+        $SubstringMatches = @(
+            $Files | Where-Object {
+                $_.Name.IndexOf($TargetEntry, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+            }
+        )
+        if ($SubstringMatches.Count -gt 0) {
+            return @{ Matches = $SubstringMatches; Type = "Partial" }
+        }
+    }
+
+    return @{ Matches = @(); Type = "None" }
+}
+
+# ------------------------------------------------------------
 # SOURCE DIRECTORY
 # ------------------------------------------------------------
 
@@ -79,6 +129,7 @@ $MissingReport  = Join-Path $ReportPath "Missing Items.txt"
 $CopyReport     = Join-Path $ReportPath "Copy Failures.txt"
 $VerifyReport   = Join-Path $ReportPath "Verification Failures.txt"
 $MultipleReport = Join-Path $ReportPath "Multiple Matches.txt"
+$PartialReport  = Join-Path $ReportPath "Partial Matches.txt"
 
 # ------------------------------------------------------------
 # SOURCE FILES
@@ -102,11 +153,17 @@ $SourceFiles = Get-ChildItem -LiteralPath $Root -File |
 $TotalFiles = $SourceFiles.Count
 
 # ------------------------------------------------------------
-# READ LIST
+# READ & CLEAN LIST
 # ------------------------------------------------------------
 
 $ListItems = Get-Content -LiteralPath $ListName |
-    ForEach-Object { $_.Trim() } |
+    ForEach-Object {
+        $clean = $_.Trim()
+        if ([string]::IsNullOrWhiteSpace($clean)) { return }
+        $clean = $clean -replace '^\d+[\.\)]\s*', ''
+        $clean = $clean -replace '^[*\-\s\u2022]+', ''
+        $clean.Trim()
+    } |
     Where-Object { $_ -ne "" }
 
 $ListCount = $ListItems.Count
@@ -115,8 +172,11 @@ $ListCount = $ListItems.Count
 # HEADER
 # ------------------------------------------------------------
 
-Clear-Host
+# ------------------------------------------------------------
+# INTERACTIVE MODE SELECTION MENU
+# ------------------------------------------------------------
 
+Clear-Host
 try {
     if ($Host.Name -eq 'ConsoleHost') {
         $maxSize = $Host.UI.RawUI.MaxPhysicalWindowSize
@@ -125,6 +185,40 @@ try {
         }
     }
 } catch {}
+
+Write-Host ""
+Write-Host " +--------------------------------------------------------------------------+" -ForegroundColor $Cyan
+Write-Host " |  M3 FILE ENGINE                                    Universal File Matcher|" -ForegroundColor $Cyan
+Write-Host " |  Created by Meet Mistry                                                  |" -ForegroundColor $Cyan
+Write-Host " +--------------------------------------------------------------------------+" -ForegroundColor $Cyan
+Write-Host ""
+
+Write-Host " Select Matching Mode:" -ForegroundColor $White
+Write-Host ""
+Write-Host "   [1] ALL MODES (Default - Press Enter)" -ForegroundColor $Green
+Write-Host "       - Full Filename with extension (e.g. report.pdf)" -ForegroundColor $Gray
+Write-Host "       - BaseName without extension (e.g. report)" -ForegroundColor $Gray
+Write-Host "       - Embedded Substring / Partial ID (e.g. 8261 inside INV_8261_final.pdf)" -ForegroundColor $Gray
+Write-Host ""
+Write-Host "   [2] Full Filename with Extension Only (e.g. report.pdf)" -ForegroundColor $Yellow
+Write-Host "   [3] BaseName without Extension Only (e.g. report)" -ForegroundColor $Yellow
+Write-Host "   [4] Embedded Substring / Partial ID Only (e.g. 8261)" -ForegroundColor $Yellow
+Write-Host ""
+Write-Host " --------------------------------------------------------------------------" -ForegroundColor $Gray
+Write-Host ""
+
+$UserChoice = Read-Host " Enter choice [1-4] (Default is 1)"
+if ([string]::IsNullOrWhiteSpace($UserChoice)) { $UserChoice = "1" }
+if ($UserChoice -notin @("1", "2", "3", "4")) { $UserChoice = "1" }
+
+$ModeLabel = switch ($UserChoice) {
+    "1" { "ALL MODES (Filename, BaseName & Embedded Substring)" }
+    "2" { "Full Filename with Extension Only" }
+    "3" { "BaseName without Extension Only" }
+    "4" { "Embedded Substring / Partial ID Only" }
+}
+
+Clear-Host
 
 Write-Host ""
 Write-Host " +--------------------------------------------------------------------------+" -ForegroundColor $Cyan
@@ -150,6 +244,7 @@ Write-Host ""
 Write-Host " [04] MATCH + COPY" -ForegroundColor $White
 Write-Host "      Source               : $Root"
 Write-Host "      Destination          : $OutputName"
+Write-Host "      Matching Mode        : $ModeLabel" -ForegroundColor $Cyan
 
 Write-Host ""
 Write-Host " --------------------------------------------------------------------------" -ForegroundColor $Gray
@@ -159,16 +254,18 @@ Write-Host ""
 # COUNTERS
 # ------------------------------------------------------------
 
-$MatchedEntries = 0
-$MatchedFiles   = 0
-$Missing        = 0
-$CopyFailures   = 0
-$Copied         = 0
-$MultipleCount  = 0
+$MatchedEntries      = 0
+$MatchedFiles        = 0
+$Missing             = 0
+$CopyFailures        = 0
+$Copied              = 0
+$MultipleCount       = 0
+$PartialMatchesCount = 0
 
-$MissingItems       = @()
-$CopyFailuresList   = @()
-$MultipleMatches    = @()
+$MissingItems        = @()
+$CopyFailuresList    = @()
+$MultipleMatches     = @()
+$PartialMatchesList  = @()
 
 # ------------------------------------------------------------
 # MATCH + COPY
@@ -182,78 +279,46 @@ foreach ($Entry in $ListItems) {
         continue
     }
 
-    # --------------------------------------------------------
-    # Determine whether extension was supplied
-    # --------------------------------------------------------
+    $MatchResult = Get-MatchedFiles -TargetEntry $Entry -Files $SourceFiles -SelectedMode $UserChoice
+    $Matches   = $MatchResult.Matches
+    $MatchType = $MatchResult.Type
 
-    $Extension = [System.IO.Path]::GetExtension($Entry)
+    if ($MatchType -eq "Partial") {
+        $PartialMatchesCount++
+        foreach ($MFile in $Matches) {
+            $PartialMatchesList += "LIST ENTRY FROM list.txt : $Entry"
+            $PartialMatchesList += "MATCHED FILENAME ON DISK : $($MFile.Name)"
+            $PartialMatchesList += "--------------------------------------------------------------------------"
+        }
+    }
 
-    $Matches = @()
+    if ($Matches.Count -gt 1) {
 
-    if ([string]::IsNullOrWhiteSpace($Extension)) {
+        $MultipleCount++
 
-        # ----------------------------------------------------
-        # No extension specified.
-        #
-        # Match every file with the same base name.
-        # ----------------------------------------------------
+        $Block = @()
 
-        $Matches = @(
-            $SourceFiles |
-            Where-Object {
-                $_.BaseName -ieq $Entry
-            }
-        )
+        $Block += "MULTIPLE MATCH: $Entry"
+        $Block += ""
+        $Block += "Reason:"
+        $Block += "Multiple files matching '$Entry' were found in the working directory."
+        $Block += ""
+        $Block += "Matched files:"
 
-        # ----------------------------------------------------
-        # Multiple matches detected
-        # ----------------------------------------------------
-
-        if ($Matches.Count -gt 1) {
-
-            $MultipleCount++
-
-            $Block = @()
-
-            $Block += "MULTIPLE MATCH: $Entry"
-            $Block += ""
-            $Block += "Reason:"
-            $Block += "The list entry did not specify a file extension."
-            $Block += "Multiple files with the same base name were found."
-            $Block += ""
-            $Block += "Matched files:"
-
-            foreach ($Match in $Matches) {
-                $Block += "- $($Match.Name)"
-            }
-
-            $Block += ""
-            $Block += "Action:"
-            $Block += "All matching files were copied."
-            $Block += ""
-            $Block += "--------------------------------------------------------------------------"
-            $Block += ""
-
-            $MultipleMatches += $Block
-
-            Write-Host "      [MULTI] $Entry -> $($Matches.Count) files" -ForegroundColor $Yellow
+        foreach ($Match in $Matches) {
+            $Block += "- $($Match.Name)"
         }
 
-    }
-    else {
+        $Block += ""
+        $Block += "Action:"
+        $Block += "All matching files were copied."
+        $Block += ""
+        $Block += "--------------------------------------------------------------------------"
+        $Block += ""
 
-        # ----------------------------------------------------
-        # Extension supplied.
-        #
-        # Match exact filename.
-        # ----------------------------------------------------
+        $MultipleMatches += $Block
 
-        $Matches = @(
-            $SourceFiles |
-            Where-Object {
-                $_.Name -ieq $Entry
-            }
-        )
+        Write-Host "      [MULTI] $Entry -> $($Matches.Count) files" -ForegroundColor $Yellow
     }
 
     # --------------------------------------------------------
@@ -281,7 +346,11 @@ foreach ($Entry in $ListItems) {
 
         $MatchedFiles++
 
-        Write-Host "      [COPY] $($File.Name)" -ForegroundColor $Cyan
+        if ($MatchType -eq "Partial") {
+            Write-Host "      [PARTIAL COPY] $($File.Name) (Matched '$Entry')" -ForegroundColor $Cyan
+        } else {
+            Write-Host "      [COPY] $($File.Name)" -ForegroundColor $Cyan
+        }
 
         $DestinationFile = Join-Path $OutputPath $File.Name
 
@@ -323,8 +392,18 @@ foreach ($Entry in $ListItems) {
 
 if ($MissingItems.Count -gt 0) {
 
-    $MissingItems |
-        Set-Content -LiteralPath $MissingReport -Encoding UTF8
+    $MissingHeader = @(
+        "==========================================================================",
+        "                         MISSING ITEMS REPORT",
+        "==========================================================================",
+        "The following entries from list.txt could not be found or matched in the",
+        "working directory.",
+        "Total Missing Entries: $($MissingItems.Count)",
+        "--------------------------------------------------------------------------",
+        ""
+    )
+    $MissingContent = $MissingHeader + ($MissingItems | ForEach-Object { "- $_" }) + @("--------------------------------------------------------------------------")
+    $MissingContent | Set-Content -LiteralPath $MissingReport -Encoding UTF8
 }
 
 # ------------------------------------------------------------
@@ -333,8 +412,18 @@ if ($MissingItems.Count -gt 0) {
 
 if ($CopyFailuresList.Count -gt 0) {
 
-    $CopyFailuresList |
-        Set-Content -LiteralPath $CopyReport -Encoding UTF8
+    $CopyFailHeader = @(
+        "==========================================================================",
+        "                         COPY FAILURES REPORT",
+        "==========================================================================",
+        "The following files could not be copied to the destination folder due to",
+        "file permissions or system I/O errors.",
+        "Total Copy Failures: $($CopyFailuresList.Count)",
+        "--------------------------------------------------------------------------",
+        ""
+    )
+    $CopyFailContent = $CopyFailHeader + ($CopyFailuresList | ForEach-Object { "- $_" }) + @("--------------------------------------------------------------------------")
+    $CopyFailContent | Set-Content -LiteralPath $CopyReport -Encoding UTF8
 }
 
 # ------------------------------------------------------------
@@ -343,8 +432,38 @@ if ($CopyFailuresList.Count -gt 0) {
 
 if ($MultipleMatches.Count -gt 0) {
 
-    $MultipleMatches |
-        Set-Content -LiteralPath $MultipleReport -Encoding UTF8
+    $MultiHeader = @(
+        "==========================================================================",
+        "                       MULTIPLE MATCHES REPORT",
+        "==========================================================================",
+        "Multiple files matched the same entry from list.txt. All matching files",
+        "were copied to the destination folder.",
+        "Total Multiple Match Conflicts: $MultipleCount",
+        "--------------------------------------------------------------------------",
+        ""
+    )
+    $MultiContent = $MultiHeader + $MultipleMatches
+    $MultiContent | Set-Content -LiteralPath $MultipleReport -Encoding UTF8
+}
+
+# ------------------------------------------------------------
+# WRITE PARTIAL MATCHES REPORT
+# ------------------------------------------------------------
+
+if ($PartialMatchesList.Count -gt 0) {
+
+    $PartialHeader = @(
+        "==========================================================================",
+        "                     PARTIAL / EMBEDDED MATCHES REPORT",
+        "==========================================================================",
+        "The following entries from list.txt were matched by searching for the",
+        "whole exact entry text as an embedded substring inside filenames.",
+        "Total Partial Matches: $PartialMatchesCount",
+        "--------------------------------------------------------------------------",
+        ""
+    )
+    $PartialReportContent = $PartialHeader + $PartialMatchesList
+    $PartialReportContent | Set-Content -LiteralPath $PartialReport -Encoding UTF8
 }
 
 # ------------------------------------------------------------
@@ -370,27 +489,8 @@ foreach ($Entry in $ListItems) {
         continue
     }
 
-    $Extension = [System.IO.Path]::GetExtension($Entry)
-
-    if ([string]::IsNullOrWhiteSpace($Extension)) {
-
-        $Matches = @(
-            $SourceFiles |
-            Where-Object {
-                $_.BaseName -ieq $Entry
-            }
-        )
-
-    }
-    else {
-
-        $Matches = @(
-            $SourceFiles |
-            Where-Object {
-                $_.Name -ieq $Entry
-            }
-        )
-    }
+    $MatchResult = Get-MatchedFiles -TargetEntry $Entry -Files $SourceFiles -SelectedMode $UserChoice
+    $Matches = $MatchResult.Matches
 
     foreach ($File in $Matches) {
 
@@ -437,8 +537,18 @@ foreach ($Entry in $ListItems) {
 
 if ($VerifyFailuresList.Count -gt 0) {
 
-    $VerifyFailuresList |
-        Set-Content -LiteralPath $VerifyReport -Encoding UTF8
+    $VerifyFailHeader = @(
+        "==========================================================================",
+        "                     VERIFICATION FAILURES REPORT",
+        "==========================================================================",
+        "The following files failed post-copy byte verification check (file size",
+        "mismatch or creation error).",
+        "Total Verification Failures: $($VerifyFailuresList.Count)",
+        "--------------------------------------------------------------------------",
+        ""
+    )
+    $VerifyFailContent = $VerifyFailHeader + ($VerifyFailuresList | ForEach-Object { "- $_" }) + @("--------------------------------------------------------------------------")
+    $VerifyFailContent | Set-Content -LiteralPath $VerifyReport -Encoding UTF8
 }
 
 # ------------------------------------------------------------
@@ -461,6 +571,7 @@ Write-Host ""
 
 Write-Host "      Matched entries         : $MatchedEntries"
 Write-Host "      Files matched           : $MatchedFiles"
+Write-Host "      Partial/Embedded matches: $PartialMatchesCount"
 Write-Host "      Missing entries         : $Missing"
 Write-Host "      Multiple matches        : $MultipleCount"
 Write-Host "      Successfully copied     : $Copied"
@@ -505,20 +616,24 @@ else {
 
 Write-Host ""
 
+if ($PartialMatchesCount -gt 0) {
+    Write-Host "      Partial / Embedded matches : Reports\Partial Matches.txt ($PartialMatchesCount)" -ForegroundColor $Cyan
+}
+
 if ($Missing -gt 0) {
-    Write-Host "      Missing entries        : Reports\Missing Items.txt" -ForegroundColor $Yellow
+    Write-Host "      Missing entries            : Reports\Missing Items.txt" -ForegroundColor $Yellow
 }
 
 if ($MultipleCount -gt 0) {
-    Write-Host "      Multiple matches       : Reports\Multiple Matches.txt" -ForegroundColor $Yellow
+    Write-Host "      Multiple matches           : Reports\Multiple Matches.txt" -ForegroundColor $Yellow
 }
 
 if ($CopyFailures -gt 0) {
-    Write-Host "      Copy failures          : Reports\Copy Failures.txt" -ForegroundColor $Red
+    Write-Host "      Copy failures              : Reports\Copy Failures.txt" -ForegroundColor $Red
 }
 
 if ($VerifyFailures -gt 0) {
-    Write-Host "      Verification failures : Reports\Verification Failures.txt" -ForegroundColor $Red
+    Write-Host "      Verification failures     : Reports\Verification Failures.txt" -ForegroundColor $Red
 }
 
 Write-Host ""
